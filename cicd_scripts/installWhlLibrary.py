@@ -5,113 +5,111 @@ import requests
 import sys
 import getopt
 import time
-import os
 
 def main():
-  shard = ''
+  workspace = ''
   token = ''
   clusterid = ''
-  libspath = ''
+  libs = ''
   dbfspath = ''
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], 'hstcld',
-      ['shard=', 'token=', 'clusterid=', 'libs=', 'dbfspath='])
+      opts, args = getopt.getopt(sys.argv[1:], 'hstcld',
+                                 ['workspace=', 'token=', 'clusterid=', 'libs=', 'dbfspath='])
   except getopt.GetoptError:
-    print(
-      'installWhlLibrary.py -s <shard> -t <token> -c <clusterid> -l <libs> -d <dbfspath>')
-    sys.exit(2)
+      print(
+          'installWhlLibrary.py -s <workspace> -t <token> -c <clusterid> -l <libs> -d <dbfspath>')
+      sys.exit(2)
 
   for opt, arg in opts:
-    if opt == '-h':
-      print(
-        'installWhlLibrary.py -s <shard> -t <token> -c <clusterid> -l <libs> -d <dbfspath>')
-      sys.exit()
-    elif opt in ('-s', '--shard'):
-      shard = arg
-    elif opt in ('-t', '--token'):
-      token = arg
-    elif opt in ('-c', '--clusterid'):
-      clusterid = arg
-    elif opt in ('-l', '--libs'):
-      libspath=arg
-    elif opt in ('-d', '--dbfspath'):
-      dbfspath=arg
+      if opt == '-h':
+          print(
+              'installWhlLibrary.py -s <workspace> -t <token> -c <clusterid> -l <libs> -d <dbfspath>')
+          sys.exit()
+      elif opt in ('-s', '--workspace'):
+          workspace = arg
+      elif opt in ('-t', '--token'):
+          token = arg
+      elif opt in ('-c', '--clusterid'):
+          clusterid = arg
+      elif opt in ('-l', '--libs'):
+          libs=arg
+      elif opt in ('-d', '--dbfspath'):
+          dbfspath=arg
 
-  print('-s is ' + shard)
+  print('-s is ' + workspace)
   print('-t is ' + token)
   print('-c is ' + clusterid)
-  print('-l is ' + libspath)
+  print('-l is ' + libs)
   print('-d is ' + dbfspath)
 
-  # Generate the list of files from walking the local path.
-  libslist = []
-  for path, subdirs, files in os.walk(libspath):
-    for name in files:
+  libslist = libs.split()
 
-      name, file_extension = os.path.splitext(name)
-      if file_extension.lower() in ['.whl']:
-        print('Adding ' + name + file_extension.lower() + ' to the list of .whl files to evaluate.')
-        libslist.append(name + file_extension.lower())
-
+  # Uninstall Library if exists on cluster
+  i=0
   for lib in libslist:
-    dbfslib = 'dbfs:' + dbfspath + '/' + lib
-    print('Evaluating whether ' + dbfslib + ' must be installed, or uninstalled and reinstalled.')
+      dbfslib = dbfspath + lib
+      print(dbfslib + ' before:' + getLibStatus(workspace, token, clusterid, dbfslib))
 
-    if (getLibStatus(shard, token, clusterid, dbfslib)) is not None:
-      print(dbfslib + ' status: ' + getLibStatus(shard, token, clusterid, dbfslib))
-      if (getLibStatus(shard, token, clusterid, dbfslib)) == "not found":
-        print(dbfslib + ' not found. Installing.')
-        installLib(shard, token, clusterid, dbfslib)
-      else:
-        print(dbfslib + ' found. Uninstalling.')
-        uninstallLib(shard, token, clusterid, dbfslib)
-        print("Restarting cluster: " + clusterid)
-        restartCluster(shard, token, clusterid)
-        print('Installing ' + dbfslib + '.')
-        installLib(shard, token, clusterid, dbfslib)
+      if (getLibStatus(workspace, token, clusterid, dbfslib) != 'not found'):
+          print(dbfslib + " exists. Uninstalling.")
+          i = i + 1
+          values = {'cluster_id': clusterid, 'libraries': [{'whl': dbfslib}]}
 
-def uninstallLib(shard, token, clusterid, dbfslib):
-  values = {'cluster_id': clusterid, 'libraries': [{'whl': dbfslib}]}
-  requests.post(shard + '/api/2.0/libraries/uninstall', data=json.dumps(values), auth=("token", token))
+          resp = requests.post(workspace + '/api/2.0/libraries/uninstall', data=json.dumps(values), auth=("token", token))
+          runjson = resp.text
+          d = json.loads(runjson)
+          print(dbfslib + ' after:' + getLibStatus(workspace, token, clusterid, dbfslib))
 
-def restartCluster(shard, token, clusterid):
-  values = {'cluster_id': clusterid}
-  requests.post(shard + '/api/2.0/clusters/restart', data=json.dumps(values), auth=("token", token))
+  # Restart if libraries uninstalled
+  if i > 0:
+      values = {'cluster_id': clusterid}
+      print("Restarting cluster:" + clusterid)
+      resp = requests.post(workspace + '/api/2.0/clusters/restart', data=json.dumps(values), auth=("token", token))
+      restartjson = resp.text
+      print(restartjson)
 
-  waiting = True
-  p = 0
-  while waiting:
-    time.sleep(30)
-    clusterresp = requests.get(shard + '/api/2.0/clusters/get?cluster_id=' + clusterid,
-      auth=("token", token))
-    clusterjson = clusterresp.text
-    jsonout = json.loads(clusterjson)
-    current_state = jsonout['state']
-    print(clusterid + " state: " + current_state)
-    if current_state in ['TERMINATED', 'RUNNING','INTERNAL_ERROR', 'SKIPPED'] or p >= 10:
-      break
-      p = p + 1
+      p = 0
+      waiting = True
+      while waiting:
+          time.sleep(30)
+          clusterresp = requests.get(workspace + '/api/2.0/clusters/get?cluster_id=' + clusterid,
+                                 auth=("token", token))
+          clusterjson = clusterresp.text
+          jsonout = json.loads(clusterjson)
+          current_state = jsonout['state']
+          print(clusterid + " state:" + current_state)
+          if current_state in ['RUNNING','INTERNAL_ERROR', 'SKIPPED'] or p >= 10:
+              break
+          p = p + 1
 
-def installLib(shard, token, clusterid, dbfslib):
-  values = {'cluster_id': clusterid, 'libraries': [{'whl': dbfslib}]}
-  requests.post(shard + '/api/2.0/libraries/install', data=json.dumps(values), auth=("token", token))
+  # Install Libraries
+  for lib in libslist:
+      dbfslib = dbfspath + lib
+      print("Installing " + dbfslib)
+      values = {'cluster_id': clusterid, 'libraries': [{'whl': dbfslib}]}
 
-def getLibStatus(shard, token, clusterid, dbfslib):
+      resp = requests.post(workspace + '/api/2.0/libraries/install', data=json.dumps(values), auth=("token", token))
+      runjson = resp.text
+      d = json.loads(runjson)
+      print(dbfslib + ' after:' + getLibStatus(workspace, token, clusterid, dbfslib))
 
-  resp = requests.get(shard + '/api/2.0/libraries/cluster-status?cluster_id='+ clusterid, auth=("token", token))
+def getLibStatus(workspace, token, clusterid, dbfslib):
+  resp = requests.get(workspace + '/api/2.0/libraries/cluster-status?cluster_id='+ clusterid, auth=("token", token))
   libjson = resp.text
   d = json.loads(libjson)
   if (d.get('library_statuses')):
-    statuses = d['library_statuses']
+      statuses = d['library_statuses']
 
-    for status in statuses:
-      if (status['library'].get('whl')):
-        if (status['library']['whl'] == dbfslib):
-          return status['status']
+      for status in statuses:
+          if (status['library'].get('whl')):
+              if (status['library']['whl'] == dbfslib):
+                  return status['status']
+              else:
+                  return "not found"
   else:
-    # No libraries found.
-    return "not found"
+      # No libraries found
+      return "not found"
 
 if __name__ == '__main__':
   main()
