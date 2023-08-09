@@ -1,4 +1,5 @@
 # Databricks notebook source
+# Must use python 3.8 
 import sys
 import pyspark.sql.functions as F
 sys.path.append("/databricks/python3/lib/python3.8/site-packages")
