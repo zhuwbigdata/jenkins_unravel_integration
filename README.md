@@ -2,6 +2,7 @@
 
 ## Reference
 https://learn.microsoft.com/en-us/azure/databricks/dev-tools/ci-cd/ci-cd-jenkins
+The example uses Runtime 7.3 LTS expiring on 09/2023. Modified for Runtime 10.4 LTS for demo.
 ## Databricks Runtime 
 10.4 LTS with Python 3.8
 ## Configurations on Jenkins CI server
