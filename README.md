@@ -16,6 +16,7 @@ conda 23.5.2
 ### Databricks CLI
 $ wget https://github.com/databricks/cli/releases/download/v0.202.0/databricks_cli_0.202.0_linux_amd64.zip
 ### COND ENV CONFIGURATION
+Run as user jenkins.
 $ conda create -n py3810 python=3.8.10
 
 $ conda activate py3810
