@@ -27,3 +27,6 @@ $ conda install pytest
 
 $ pip3 install --upgrade "databricks-connect==10.4.*"
 
+### Jenkins Pipeline
+See pipeline groovy file.
+
