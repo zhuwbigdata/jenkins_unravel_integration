@@ -227,7 +227,7 @@ def main():
     elif opt in ('-o', '--outfilepath'):
         outfilepath = arg
 
-  token = 'JWT eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYWRtaW4iLCJhcHBJZCI6ImNpY2QiLCJpZCI6IiIsInVzZXJuYW1lIjoiIiwidGFncyI6e30sImF1ZCI6IjNwIiwiaWF0IjoxNjgzNTY4NzE1fQ.Mthh9x832yQyJXOpQX6Ulj2b0CgUDLfWFoAjCAY67Jw'
+  
   print('-u is ' + unravel)
   print('-t is ' + token)
   print('-l is ' + localpath)
