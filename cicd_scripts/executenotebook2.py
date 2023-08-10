@@ -78,7 +78,7 @@ def main():
     name, file_extension = os.path.splitext(nameonly)
 
     # workspacepath removes the extension, so now add it back.
-    fullworkspacepath = workspacepath + '/' + name + file_extension
+    fullworkspacepath = workspacepath + '/' + name 
 
     print('Running job for: ' + fullworkspacepath)
     print('name:' + name)
