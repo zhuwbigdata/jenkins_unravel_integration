@@ -19,6 +19,12 @@ node {
   def CONDAPATH       = "/opt/miniconda"
   def CONDAENV        = "py3810"
   def DBRKSCLI        = "/opt/databricks_cli"
+  def NODEIDTYPE      = "Standard_D3_v2"
+  def NUMWORKERS      = 1
+  def SPARKVERSION    = "10.4.x-scala2.12"
+  def UNRAVELHOST     = "http://44.214.236.147:3000"
+  def UNRAVELTOKEN    = "unravel-token"
+  def UNRAVELPATH     = "${BUILDPATH}/Validation/Unravel"
 
   stage('Setup') {
       withCredentials([string(credentialsId: DBTOKEN, variable: 'TOKEN')]) {
@@ -81,14 +87,22 @@ node {
   }
   stage('Build Artifact') {
     sh """mkdir -p ${BUILDPATH}/notebooks
+          mkdir -p ${BUILDPATH}/cicd_scripts
           mkdir -p ${BUILDPATH}/libraries/python
           mkdir -p ${BUILDPATH}/Validation/Output
+          mkdir -p ${BUILDPATH}/Validation/Unravel
           #Get modified files
           git diff --name-only --diff-filter=AMR HEAD^1 HEAD | xargs -I '{}' cp --parents -r '{}' ${BUILDPATH}
-
+          
           # Get packaged libs
           find ${LIBRARYPATH} -name '*.whl' | xargs -I '{}' cp '{}' ${BUILDPATH}/libraries/python/
 
+          
+          
+          # Patch by Wayne Zhu - have to copy source code execept libraries over to the build
+          cp ${SCRIPTPATH}/*.* ${BUILDPATH}/cicd_scripts
+          cp ${NOTEBOOKPATH}/*.* ${BUILDPATH}/notebooks
+          
           # Generate artifact
           tar -czvf ${GITREPO}/Builds/latest_build.tar.gz ${BUILDPATH}
        """
@@ -100,7 +114,7 @@ node {
           source ${CONDAPATH}/bin/activate ${CONDAENV}
 
           # Use Databricks CLI to deploy notebooks
-          echo databricks workspace import-dir ${BUILDPATH}/notebooks ${WORKSPACEPATH}
+          echo databricks workspace import_dir ${BUILDPATH}/notebooks ${WORKSPACEPATH}
           ${DBRKSCLI}/databricks workspace import-dir ${BUILDPATH}/notebooks ${WORKSPACEPATH}
           
           echo databricks fs cp -r ${BUILDPATH}/libraries/python ${DBFSPATH}
@@ -125,7 +139,9 @@ node {
            """
     }
   }
+
   stage('Run Integration Tests') {
+    /**
     withCredentials([string(credentialsId: DBTOKEN, variable: 'TOKEN')]) {
         sh """#!/bin/bash
                 
@@ -138,6 +154,33 @@ node {
                         --outfilepath=${OUTFILEPATH}
            """
     }
+    */
+    withCredentials([string(credentialsId: DBTOKEN, variable: 'TOKEN')]) {
+        sh """#!/bin/bash
+              
+
+              python3 ${SCRIPTPATH}/executenotebook2.py --shard=${DBURL}\
+                        --token=\'$TOKEN\'\
+                        --sparkversion=${SPARKVERSION}\
+                        --nodetypeid=${NODEIDTYPE}\
+                        --numworkers=${NUMWORKERS}\
+                        --localpath=${NOTEBOOKPATH}\
+                        --workspacepath=${WORKSPACEPATH}\
+                        --outfilepath=${OUTFILEPATH}
+            """
+    }
+    withCredentials([string(credentialsId: UNRAVELTOKEN, variable: 'TOKEN')]) {
+        sh """#!/bin/bash
+              # Enable Conda environment for tests
+              source ${CONDAPATH}/bin/activate ${CONDAENV}
+              
+              python3 ${SCRIPTPATH}/unravelclient.py --unravel=${UNRAVELHOST}\
+                        --token=$TOKEN\
+                        --localpath=${NOTEBOOKPATH}\
+                        --infilepath=${OUTFILEPATH}\
+                        --outfilepath=${UNRAVELPATH} || true
+           """
+    }
     sh """#!/bin/bash
     
           # Enable Conda environment for tests
@@ -145,9 +188,11 @@ node {
           
           # Replace output path
           sed -i -e 's #ENV# ${OUTFILEPATH} g' ${SCRIPTPATH}/evaluatenotebookruns.py
+          sed -i -e 's #UNRAV# ${UNRAVELPATH} g' ${SCRIPTPATH}/evaluatenotebookruns.py
           python3 -m pytest --junit-xml=${TESTRESULTPATH}/TEST-notebookout.xml ${SCRIPTPATH}/evaluatenotebookruns.py || true
        """
   }
+  
   stage('Report Test Results') {
     sh """find ${OUTFILEPATH} -name '*.json' -exec gzip --verbose {} \\;
           touch ${TESTRESULTPATH}/TEST-*.xml
