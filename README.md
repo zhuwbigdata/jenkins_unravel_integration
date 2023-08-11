@@ -23,6 +23,8 @@ $ conda activate py3810
 
 $ conda install requests
 
+$ conda install markdown
+
 $ conda install pytest
 
 $ pip3 install --upgrade "databricks-connect==10.4.*"
