@@ -7,7 +7,7 @@ import os
 class TestJobOutput(unittest.TestCase):
 
   test_output_path = '#ENV#'
-  unravel_output_path = "#UNRAV#'
+  unravel_output_path = '#UNRAV#'
 
   def test_performance(self):
       path = self.test_output_path
